@@ -1,0 +1,22 @@
+# Web panel
+flask>=3.0
+
+# Vision. Versions depend on the Pi's Python (run: python3 --version).
+# Python <= 3.12 (Bookworm): apt's picamera2 is built against NumPy 1.x,
+# so keep NumPy 1.x and OpenCV < 4.12 (which needs NumPy 2).
+numpy<2; python_version < "3.13"
+opencv-python<4.12; python_version < "3.13"
+mediapipe>=0.10.14,<1.0; python_version < "3.13"
+# Python 3.13 (Trixie): system packages use NumPy 2, and mediapipe 1.0.x is
+# the only release with a Linux ARM build for 3.13.
+mediapipe>=1.0; python_version >= "3.13"
+
+# macOS (testing on a laptop webcam): there are no apt packages, so on
+# Python 3.13+ pip has to supply NumPy and OpenCV too. Python <= 3.12 on a
+# Mac is already covered by the lines above.
+numpy>=2; sys_platform == "darwin" and python_version >= "3.13"
+opencv-python>=4.12; sys_platform == "darwin" and python_version >= "3.13"
+
+# UART to the ESP32 (also available via apt: python3-serial)
+pyserial>=3.5
+# picamera2 comes from apt: sudo apt install python3-picamera2

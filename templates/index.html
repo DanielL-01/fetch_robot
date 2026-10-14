@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot control</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1e2128; --line: #2e323c;
+    --text: #e6e8ec; --dim: #8b919d; --accent: #4da3ff;
+    --go: #2e9e5b; --stop: #d2403a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: var(--bg); color: var(--text);
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 17px; margin: 0 0 14px; font-weight: 600; }
+  .wrap { display: grid; grid-template-columns: minmax(320px, 1fr) 340px; gap: 16px; max-width: 1200px; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+             color: var(--dim); margin: 0 0 12px; font-weight: 600; }
+  img#view { width: 100%; border-radius: 8px; background: #000; display: block; }
+
+  .arm-row { display: flex; gap: 10px; align-items: center; }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 11px 16px;
+           color: #fff; cursor: pointer; font-weight: 600; }
+  button:active { transform: translateY(1px); }
+  #armBtn { background: var(--go); flex: 1; }
+  #armBtn.on { background: #555a66; }
+  #stopBtn { background: var(--stop); flex: 1; font-size: 16px; }
+  .small { background: #333843; padding: 8px 12px; font-weight: 500; font-size: 13px; }
+
+  .badge { display: inline-block; padding: 3px 9px; border-radius: 20px;
+           font-size: 12px; font-weight: 600; }
+  .badge.armed { background: var(--stop); }
+  .badge.safe  { background: #3a4049; color: var(--dim); }
+
+  .grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; }
+  .grid .k { color: var(--dim); font-size: 13px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  label.row { display: grid; grid-template-columns: 96px 1fr 52px; gap: 8px;
+              align-items: center; margin-bottom: 8px; font-size: 13px; color: var(--dim); }
+  label.row .val { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  select { width: 100%; padding: 8px; border-radius: 7px; background: #262a33;
+           color: var(--text); border: 1px solid var(--line); font: inherit; }
+  .checks { display: flex; flex-wrap: wrap; gap: 14px; }
+  .checks label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); }
+  input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+  .note { color: #e3b341; font-size: 12px; min-height: 16px; margin-top: 8px; }
+  .hint { color: var(--dim); font-size: 12px; margin-top: 10px; }
+  .hidden { display: none; }
+  .bar { height: 6px; background: #2a2f38; border-radius: 3px; overflow: hidden; margin-top: 3px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
+</style>
+</head>
+<body>
+
+<h1>Robot control <span id="armBadge" class="badge safe">disarmed</span></h1>
+
+<div class="wrap">
+  <div>
+    <div class="card">
+      <img id="view" src="/video" alt="camera">
+    </div>
+
+    <div class="card">
+      <h2>Drive</h2>
+      <div class="arm-row">
+        <button id="armBtn">Arm</button>
+        <button id="stopBtn">STOP</button>
+      </div>
+      <div id="note" class="note"></div>
+      <div class="hint">Starts disarmed. Disarms itself if this page stops responding.</div>
+    </div>
+
+    <div class="card">
+      <h2>Status</h2>
+      <div class="grid">
+        <span class="k">vx (forward)</span><span><span id="vx" class="num">0.00</span> m/s<div class="bar"><i id="vxBar"></i></div></span>
+        <span class="k">vy (left)</span><span><span id="vy" class="num">0.00</span> m/s<div class="bar"><i id="vyBar"></i></div></span>
+        <span class="k">detection</span><span id="detect">-</span>
+        <span class="k">target size</span><span id="size" class="num">-</span>
+        <span class="k">fps</span><span id="fps" class="num">-</span>
+        <span class="k">ESP32</span><span id="esp">-</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Target</h2>
+      <select id="tracker"></select>
+      <div class="checks" style="margin-top:12px">
+        <label><input type="checkbox" id="preview"> video preview</label>
+        <label id="maskWrap"><input type="checkbox" id="show_mask"> mask view</label>
+      </div>
+      <div class="hint" id="trackerHint"></div>
+    </div>
+
+    <div class="card" id="hsvCard">
+      <h2>Colour range (HSV)</h2>
+      <div id="hsv"></div>
+      <div class="hint">Turn on mask view, then adjust until only the ball is white.</div>
+    </div>
+
+    <div class="card">
+      <h2>Control</h2>
+      <div id="ctrl"></div>
+    </div>
+
+    <div class="card">
+      <h2>Mounting</h2>
+      <select id="mount">
+        <option value="forward">forward - camera faces ahead</option>
+        <option value="up">up - camera faces the ceiling</option>
+      </select>
+      <div class="checks" style="margin-top:12px">
+        <label><input type="checkbox" id="invert_x"> invert sideways</label>
+        <label><input type="checkbox" id="invert_y"> invert forward</label>
+        <label><input type="checkbox" id="mirror"> mirror image</label>
+        <label id="swapWrap"><input type="checkbox" id="swap_axes"> swap axes</label>
+      </div>
+      <div class="hint" id="axisHint"></div>
+      <div class="hint">If the robot moves away from the target instead of toward it, flip one of these.</div>
+    </div>
+
+    <div class="card">
+      <h2>Settings</h2>
+      <div class="arm-row">
+        <button class="small" id="saveBtn" style="flex:1">Save</button>
+        <button class="small" id="resetBtn" style="flex:1">Reset</button>
+      </div>
+      <div class="hint" id="saveHint">Saved settings load automatically on restart.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Sliders: [key, label, min, max, step]
+const CTRL = [
+  ["k_lin",         "side gain",  0.05, 2.0,  0.05],
+  ["k_dist",        "dist gain",  0.05, 2.0,  0.05],
+  ["max_v",         "max speed",  0.05, 0.80, 0.05],
+  ["deadzone",      "dead zone",  0.00, 0.40, 0.01],
+  ["dist_deadzone", "dist d-zone",0.00, 0.50, 0.01],
+  ["target_size",   "target size",0.05, 0.60, 0.01],
+  ["smoothing",     "smoothing",  0.00, 0.90, 0.05],
+];
+const HSV = [
+  ["h_lo","hue min",0,179,1], ["h_hi","hue max",0,179,1],
+  ["s_lo","sat min",0,255,1], ["s_hi","sat max",0,255,1],
+  ["v_lo","val min",0,255,1], ["v_hi","val max",0,255,1],
+];
+let settings = {}, trackers = [], ready = false;
+
+const $ = id => document.getElementById(id);
+const post = (url, body) =>
+  fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify(body||{})}).then(r => r.json());
+const patch = changes => { Object.assign(settings, changes); post("/api/settings", changes); };
+
+function slider(key, label, min, max, step, value, onInput) {
+  const l = document.createElement("label");
+  l.className = "row";
+  l.innerHTML = `<span>${label}</span><input type="range" min="${min}" max="${max}"
+                 step="${step}" value="${value}"><span class="val"></span>`;
+  const [input, out] = [l.querySelector("input"), l.querySelector(".val")];
+  const show = () => out.textContent = (+input.value).toFixed(step < 1 ? 2 : 0);
+  show();
+  input.oninput = () => { show(); onInput(+input.value); };
+  return l;
+}
+
+function buildControls() {
+  const box = $("ctrl");
+  box.innerHTML = "";
+  CTRL.forEach(([k, lbl, lo, hi, st]) =>
+    box.appendChild(slider(k, lbl, lo, hi, st, settings[k], v => patch({[k]: v}))));
+}
+
+function buildHsv() {
+  const t = settings.tracker;
+  const info = trackers.find(x => x.name === t) || {};
+  $("hsvCard").classList.toggle("hidden", !info.uses_hsv);
+  $("maskWrap").classList.toggle("hidden", !info.uses_hsv);
+  $("trackerHint").textContent = info.uses_hsv
+    ? "Colour tracking. White ping pong balls are unreliable — orange works far better."
+    : "Hand tracking. Slower than colour, so expect fewer frames per second.";
+  if (!info.uses_hsv) return;
+
+  const key = t + "_hsv";
+  const box = $("hsv");
+  box.innerHTML = "";
+  HSV.forEach(([k, lbl, lo, hi, st]) =>
+    box.appendChild(slider(k, lbl, lo, hi, st, settings[key][k],
+                           v => patch({[key]: {[k]: v}}))));
+}
+
+// Swapping only means something when the camera faces the ceiling.
+function showAxes() {
+  const up = settings.mount === "up";
+  $("swapWrap").classList.toggle("hidden", !up);
+  $("axisHint").textContent = !up
+    ? "Left/right in the image = strafe (vy). Distance comes from target size (vx)."
+    : settings.swap_axes
+      ? "Left/right in the image = forward/back (vx). Up/down = strafe (vy)."
+      : "Up/down in the image = forward/back (vx). Left/right = strafe (vy).";
+}
+
+function bindCheck(id) {
+  $(id).onchange = e => patch({[id]: e.target.checked});
+}
+
+async function init() {
+  trackers = await (await fetch("/api/trackers")).json();
+  settings = await (await fetch("/api/settings")).json();
+
+  $("tracker").innerHTML = trackers
+    .map(t => `<option value="${t.name}">${t.label}</option>`).join("");
+  $("tracker").value = settings.tracker;
+  $("tracker").onchange = e => { patch({tracker: e.target.value}); buildHsv(); };
+
+  $("mount").value = settings.mount;
+  $("mount").onchange = e => { patch({mount: e.target.value}); showAxes(); };
+
+  ["preview","show_mask","invert_x","invert_y","mirror","swap_axes"].forEach(id => {
+    $(id).checked = settings[id];
+    bindCheck(id);
+  });
+
+  $("swap_axes").addEventListener("change", showAxes);
+
+  buildControls();
+  buildHsv();
+  showAxes();
+  ready = true;
+}
+
+$("armBtn").onclick = () => post("/api/arm", {armed: !$("armBtn").classList.contains("on")});
+$("stopBtn").onclick = () => post("/api/arm", {armed: false});
+$("saveBtn").onclick = () => post("/api/save").then(() => {
+  $("saveHint").textContent = "Saved.";
+  setTimeout(() => $("saveHint").textContent = "Saved settings load automatically on restart.", 2000);
+});
+$("resetBtn").onclick = async () => {
+  if (!confirm("Reset every setting to its default?")) return;
+  settings = await post("/api/reset");
+  await init();
+};
+
+// Poll twice a second. This is also the heartbeat: if it stops, the robot disarms.
+setInterval(async () => {
+  let s;
+  try { s = await (await fetch("/api/state")).json(); }
+  catch { $("esp").textContent = "panel offline"; return; }
+
+  $("vx").textContent = s.vx.toFixed(2);
+  $("vy").textContent = s.vy.toFixed(2);
+  $("vxBar").style.width = Math.min(100, Math.abs(s.vx) / 0.8 * 100) + "%";
+  $("vyBar").style.width = Math.min(100, Math.abs(s.vy) / 0.8 * 100) + "%";
+  $("detect").textContent = s.detect;
+  $("size").textContent = s.size ? s.size.toFixed(3) : "-";
+  $("fps").textContent = s.fps.toFixed(1);
+  $("esp").textContent = s.esp;
+  $("note").textContent = s.note || "";
+
+  const badge = $("armBadge"), btn = $("armBtn");
+  badge.textContent = s.armed ? "ARMED" : "disarmed";
+  badge.className = "badge " + (s.armed ? "armed" : "safe");
+  btn.textContent = s.armed ? "Disarm" : "Arm";
+  btn.classList.toggle("on", s.armed);
+}, 500);
+
+init();
+</script>
+</body>
+</html>

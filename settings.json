@@ -1,0 +1,34 @@
+{
+  "tracker": "pingpong",
+  "mount": "up",
+  "invert_x": false,
+  "invert_y": false,
+  "mirror": false,
+  "k_lin": 0.4,
+  "k_dist": 0.6,
+  "max_v": 0.3,
+  "deadzone": 0.08,
+  "dist_deadzone": 0.15,
+  "target_size": 0.22,
+  "smoothing": 0.4,
+  "min_conf": 0.5,
+  "min_radius_px": 8,
+  "tennis_hsv": {
+    "h_lo": 25,
+    "h_hi": 45,
+    "s_lo": 70,
+    "s_hi": 255,
+    "v_lo": 60,
+    "v_hi": 255
+  },
+  "pingpong_hsv": {
+    "h_lo": 0,
+    "h_hi": 13,
+    "s_lo": 156,
+    "s_hi": 255,
+    "v_lo": 129,
+    "v_hi": 255
+  },
+  "preview": true,
+  "show_mask": true
+}
